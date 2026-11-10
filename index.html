@@ -128,4 +128,34 @@
       let target = null;
       try {
         const res = await fetch(url, { cache: 'no-store' });
-        answer = (await
+        answer = (await res.text()).trim();
+        log('HTTP ' + res.status);
+        log('Ответ: ' + answer);
+        target = extractUrl(answer);
+        if (!target) log('В ответе нет http(s)-ссылки');
+      } catch (e) {
+        log('Ошибка fetch (CORS или сеть): ' + e.message);
+      }
+
+      if (target) {
+        makeButton(target, 'Перейти');
+      } else if (DEMO && answer) {
+        log('ДЕМО: кнопка ведёт на ' + DEMO_URL);
+        target = DEMO_URL;
+        makeButton(target, 'Перейти (демо, ответ ZTDS: ' + answer + ')');
+      } else if (FALLBACK_URL) {
+        target = FALLBACK_URL;
+        makeButton(target, 'Перейти');
+      } else {
+        return;
+      }
+
+      if (autoRedirect) location.replace(target);
+    }
+
+    renderParams();
+    renderInfo();
+    main();
+  </script>
+</body>
+</html>
