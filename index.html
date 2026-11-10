@@ -5,9 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ZTDS test</title>
   <style>
+    :root { color-scheme: light dark; }
     body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    h2 { margin-top: 2rem; font-size: 1.1rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid rgba(128,128,128,.35); word-break: break-word; }
+    th { font-weight: 600; }
+    .tag { font-size: .8rem; opacity: .7; }
     #cta { display: inline-block; padding: .7rem 1.2rem; background: #1a73e8; color: #fff; border-radius: 6px; text-decoration: none; }
-    pre { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; word-break: break-word; }
+    pre { background: rgba(128,128,128,.15); padding: 1rem; white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -15,24 +21,83 @@
 
   <div id="box"></div>
 
+  <h2>Параметры из ссылки</h2>
+  <div id="params"></div>
+
+  <h2>Страница</h2>
+  <div id="info"></div>
+
   <!-- блок отладки: в рабочей версии удалить -->
+  <h2>Лог</h2>
   <pre id="log"></pre>
 
   <script>
     const BASE = 'https://demo.ztds.info/www/';
     const DEFAULT_KEYWORD = 'keyword';
     const AUTO_REDIRECT = false;                 // true: сразу переходить без клика
-    const DEMO = true;                           // true: если ответ не ссылка, всё равно показать кнопку-заглушку
+    const DEMO = true;                           // true: если ответ не ссылка, показать кнопку-заглушку
     const DEMO_URL = 'https://example.com/';     // куда ведёт кнопка в демо-режиме
     const FALLBACK_URL = '';                     // куда вести, если ZTDS не ответил (пусто = кнопки нет)
+    const SERVICE = ['k', 'go'];                 // служебные параметры, в ZTDS не уходят
 
     const params = new URLSearchParams(location.search);
     const keyword = params.get('k') || DEFAULT_KEYWORD;
     const autoRedirect = params.has('go') ? params.get('go') === '1' : AUTO_REDIRECT;
 
+    // все параметры, кроме служебных, уходят в ZTDS
+    const forward = new URLSearchParams();
+    for (const [name, value] of params) {
+      if (!SERVICE.includes(name)) forward.append(name, value);
+    }
+
     const box = document.getElementById('box');
     const logEl = document.getElementById('log');
     const log = s => { logEl.textContent += s + '\n'; };
+
+    function cell(tag, text) {
+      const el = document.createElement(tag);
+      el.textContent = text;
+      return el;
+    }
+
+    // таблица: каждая строка = [название, значение, пометка]
+    function renderTable(target, headers, rows) {
+      const table = document.createElement('table');
+      const head = document.createElement('tr');
+      headers.forEach(h => head.appendChild(cell('th', h)));
+      table.appendChild(head);
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        r.forEach((v, i) => {
+          const td = cell('td', v);
+          if (i === 2) td.className = 'tag';
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      target.appendChild(table);
+    }
+
+    function renderParams() {
+      const target = document.getElementById('params');
+      const rows = [];
+      for (const [name, value] of params) {
+        rows.push([name, value, SERVICE.includes(name) ? 'служебный' : 'уходит в ZTDS']);
+      }
+      if (!rows.length) {
+        target.textContent = 'Параметров в ссылке нет.';
+        return;
+      }
+      renderTable(target, ['Параметр', 'Значение', ''], rows);
+    }
+
+    function renderInfo() {
+      renderTable(document.getElementById('info'), ['Что', 'Значение'], [
+        ['Адрес страницы', location.href],
+        ['Ключ для ZTDS', keyword],
+        ['Реферер', document.referrer || '(пусто)']
+      ]);
+    }
 
     // ищет в ответе первую http(s)-ссылку; всё остальное отбрасывает
     function extractUrl(text) {
@@ -55,39 +120,12 @@
     }
 
     async function main() {
-      const url = BASE + encodeURIComponent(keyword);
+      const qs = forward.toString();
+      const url = BASE + encodeURIComponent(keyword) + (qs ? '?' + qs : '');
       log('Запрос: ' + url);
 
       let answer = '';
       let target = null;
       try {
         const res = await fetch(url, { cache: 'no-store' });
-        answer = (await res.text()).trim();
-        log('HTTP ' + res.status);
-        log('Ответ: ' + answer);
-        target = extractUrl(answer);
-        if (!target) log('В ответе нет http(s)-ссылки');
-      } catch (e) {
-        log('Ошибка fetch (CORS или сеть): ' + e.message);
-      }
-
-      if (target) {
-        makeButton(target, 'Перейти');
-      } else if (DEMO && answer) {
-        log('ДЕМО: кнопка ведёт на ' + DEMO_URL);
-        target = DEMO_URL;
-        makeButton(target, 'Перейти (демо, ответ ZTDS: ' + answer + ')');
-      } else if (FALLBACK_URL) {
-        target = FALLBACK_URL;
-        makeButton(target, 'Перейти');
-      } else {
-        return;
-      }
-
-      if (autoRedirect) location.replace(target);
-    }
-
-    main();
-  </script>
-</body>
-</html>
+        answer = (await
