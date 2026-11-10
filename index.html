@@ -3,21 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Перейти</title>
+  <title>ZTDS test</title>
   <style>
     :root { color-scheme: light dark; }
     body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    h2 { margin-top: 2rem; font-size: 1.1rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid rgba(128,128,128,.35); word-break: break-word; }
+    th { font-weight: 600; }
+    .tag { font-size: .8rem; opacity: .7; }
     #cta { display: inline-block; padding: .7rem 1.2rem; background: #1a73e8; color: #fff; border-radius: 6px; text-decoration: none; }
-    #debug { display: none; }
-    #debug.on { display: block; }
     pre { background: rgba(128,128,128,.15); padding: 1rem; white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body>
+  <h1>ZTDS test</h1>
+
   <div id="box"></div>
 
-  <div id="debug">
-    <h2>Отладка</h2>
+  <div id="blocks">
+    <h2>Параметры из ссылки</h2>
+    <div id="params"></div>
+
+    <h2>Страница</h2>
+    <div id="info"></div>
+
+    <h2>Лог</h2>
     <pre id="log"></pre>
   </div>
 
@@ -26,11 +37,11 @@
     const AUTO_REDIRECT = false;                      // true: сразу переходить без клика
     const FALLBACK_URL = '';                          // куда вести, если ZTDS не ответил (пусто = кнопки нет)
     const BUTTON_TEXT = 'Перейти';
-    const SERVICE = ['k', 'go', 'debug'];             // служебные параметры, в ZTDS не уходят
+    const SHOW_INFO = true;                           // false: убрать со страницы параметры, данные страницы и лог
+    const SERVICE = ['k', 'go'];                      // служебные параметры, в ZTDS не уходят
 
     const params = new URLSearchParams(location.search);
     const keyword = params.get('k') || '';
-    const debug = params.get('debug') === '1';
     const autoRedirect = params.has('go') ? params.get('go') === '1' : AUTO_REDIRECT;
 
     // все параметры, кроме служебных, уходят в ZTDS
@@ -41,8 +52,52 @@
 
     const box = document.getElementById('box');
     const logEl = document.getElementById('log');
-    if (debug) document.getElementById('debug').classList.add('on');
-    const log = s => { if (debug) logEl.textContent += s + '\n'; };
+    const log = s => { logEl.textContent += s + '\n'; };
+
+    function cell(tag, text) {
+      const el = document.createElement(tag);
+      el.textContent = text;
+      return el;
+    }
+
+    // таблица: каждая строка = [название, значение, пометка]
+    function renderTable(target, headers, rows) {
+      const table = document.createElement('table');
+      const head = document.createElement('tr');
+      headers.forEach(h => head.appendChild(cell('th', h)));
+      table.appendChild(head);
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        r.forEach((v, i) => {
+          const td = cell('td', v);
+          if (i === 2) td.className = 'tag';
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      target.appendChild(table);
+    }
+
+    function renderParams() {
+      const target = document.getElementById('params');
+      const rows = [];
+      for (const [name, value] of params) {
+        rows.push([name, value, SERVICE.includes(name) ? 'служебный' : 'уходит в ZTDS']);
+      }
+      if (!rows.length) {
+        target.textContent = 'Параметров в ссылке нет.';
+        return;
+      }
+      renderTable(target, ['Параметр', 'Значение', ''], rows);
+    }
+
+    function renderInfo() {
+      renderTable(document.getElementById('info'), ['Что', 'Значение'], [
+        ['Адрес страницы', location.href],
+        ['Ключ для ZTDS', keyword || '(не задан)'],
+        ['Реферер', document.referrer || '(пусто)']
+      ]);
+    }
 
     // берёт из ответа первую http(s)-ссылку; всё остальное отбрасывает
     function extractUrl(text) {
@@ -91,9 +146,15 @@
       showButton(target);
       log('Кнопка ведёт на: ' + target);
 
-      if (autoRedirect && !debug) location.replace(target);
+      if (autoRedirect) location.replace(target);
     }
 
+    if (SHOW_INFO) {
+      renderParams();
+      renderInfo();
+    } else {
+      document.getElementById('blocks').remove();
+    }
     main();
   </script>
 </body>
