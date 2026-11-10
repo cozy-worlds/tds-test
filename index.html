@@ -7,14 +7,13 @@
   <style>
     body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
     #cta { display: inline-block; padding: .7rem 1.2rem; background: #1a73e8; color: #fff; border-radius: 6px; text-decoration: none; }
-    #cta[hidden] { display: none; }
     pre { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body>
   <h1>ZTDS test</h1>
 
-  <p><a id="cta" href="#" hidden>Перейти</a></p>
+  <div id="box"></div>
 
   <!-- блок отладки: в рабочей версии удалить -->
   <pre id="log"></pre>
@@ -22,49 +21,68 @@
   <script>
     const BASE = 'https://demo.ztds.info/www/';
     const DEFAULT_KEYWORD = 'keyword';
-    const AUTO_REDIRECT = false;   // true: сразу переходить без клика
-    const FALLBACK_URL = '';       // куда вести, если ZTDS не ответил (пусто = никуда)
+    const AUTO_REDIRECT = false;                 // true: сразу переходить без клика
+    const DEMO = true;                           // true: если ответ не ссылка, всё равно показать кнопку-заглушку
+    const DEMO_URL = 'https://example.com/';     // куда ведёт кнопка в демо-режиме
+    const FALLBACK_URL = '';                     // куда вести, если ZTDS не ответил (пусто = кнопки нет)
 
     const params = new URLSearchParams(location.search);
     const keyword = params.get('k') || DEFAULT_KEYWORD;
     const autoRedirect = params.has('go') ? params.get('go') === '1' : AUTO_REDIRECT;
 
-    const cta = document.getElementById('cta');
+    const box = document.getElementById('box');
     const logEl = document.getElementById('log');
     const log = s => { logEl.textContent += s + '\n'; };
 
-    // пропускаем только http(s), чтобы в href не попало javascript: и т.п.
-    function safeUrl(text) {
+    // ищет в ответе первую http(s)-ссылку; всё остальное отбрасывает
+    function extractUrl(text) {
+      const m = text.match(/https?:\/\/[^\s"'<>]+/i);
+      if (!m) return null;
       try {
-        const u = new URL(text.trim());
+        const u = new URL(m[0]);
         return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
       } catch (e) {
         return null;
       }
     }
 
+    function makeButton(href, label) {
+      const a = document.createElement('a');
+      a.id = 'cta';
+      a.href = href;
+      a.textContent = label;
+      box.appendChild(a);
+    }
+
     async function main() {
       const url = BASE + encodeURIComponent(keyword);
       log('Запрос: ' + url);
 
+      let answer = '';
       let target = null;
       try {
         const res = await fetch(url, { cache: 'no-store' });
-        const text = await res.text();
+        answer = (await res.text()).trim();
         log('HTTP ' + res.status);
-        log('Ответ: ' + text.trim());
-        target = safeUrl(text);
-        if (!target) log('Ответ не похож на http(s)-ссылку');
+        log('Ответ: ' + answer);
+        target = extractUrl(answer);
+        if (!target) log('В ответе нет http(s)-ссылки');
       } catch (e) {
         log('Ошибка fetch (CORS или сеть): ' + e.message);
       }
 
-      if (!target && FALLBACK_URL) target = FALLBACK_URL;
-      if (!target) return;
-
-      cta.href = target;
-      cta.textContent = 'Перейти: ' + target;
-      cta.hidden = false;
+      if (target) {
+        makeButton(target, 'Перейти');
+      } else if (DEMO && answer) {
+        log('ДЕМО: кнопка ведёт на ' + DEMO_URL);
+        target = DEMO_URL;
+        makeButton(target, 'Перейти (демо, ответ ZTDS: ' + answer + ')');
+      } else if (FALLBACK_URL) {
+        target = FALLBACK_URL;
+        makeButton(target, 'Перейти');
+      } else {
+        return;
+      }
 
       if (autoRedirect) location.replace(target);
     }
